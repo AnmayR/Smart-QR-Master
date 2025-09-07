@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smart QR Master</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 20px;
+    }
+    .container {
+      display: flex;
+      gap: 20px;
+      max-width: 1200px;
+      width: 100%;
+    }
+    .controls, .preview {
+      background: #161b22;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    .controls {
+      width: 350px;
+    }
+    .controls input, .controls select, .controls button {
+      width: 100%;
+      margin: 8px 0;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #30363d;
+      background: #0d1117;
+      color: #e6edf3;
+    }
+    .controls button {
+      background: #238636;
+      border: none;
+      cursor: pointer;
+    }
+    .controls button:hover {
+      background: #2ea043;
+    }
+    .preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #previewBox {
+      background: #fff;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 15px;
+    }
+    #qrcode canvas, #qrcode img {
+      display: block;
+      margin: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="controls">
+      <h2>Smart QR Master</h2>
+      <label>Content type</label>
+      <select id="contentType">
+        <option value="text">Text / URL</option>
+        <option value="wifi">Wi-Fi (connect)</option>
+        <option value="vcard">vCard (contact)</option>
+        <option value="upi">UPI / Payment</option>
+        <option value="dynamic">Dynamic (with expiry)</option>
+      </select>
+
+      <input type="text" id="textInput" placeholder="Text / URL">
+
+      <div id="wifiFields" style="display:none;">
+        <input type="text" id="wifiSSID" placeholder="Wi-Fi SSID">
+        <input type="text" id="wifiPass" placeholder="Wi-Fi Password">
+      </div>
+
+      <div id="vcardFields" style="display:none;">
+        <input type="text" id="vName" placeholder="Full Name">
+        <input type="text" id="vPhone" placeholder="Phone">
+        <input type="text" id="vEmail" placeholder="Email">
+      </div>
+
+      <div id="upiFields" style="display:none;">
+        <input type="text" id="upiId" placeholder="UPI ID">
+        <input type="text" id="upiName" placeholder="Name (optional)">
+      </div>
+
+      <div id="dynamicFields" style="display:none;">
+        <input type="text" id="dynURL" placeholder="Dynamic URL">
+        <input type="datetime-local" id="dynExpiry">
+      </div>
+
+      <label>Foreground color</label>
+      <input type="color" id="fgColor" value="#000000">
+
+      <label>Background color</label>
+      <input type="color" id="bgColor" value="#ffffff">
+
+      <label>Size (px)</label>
+      <input type="number" id="size" value="300">
+
+      <label>Logo (optional)</label>
+      <input type="file" id="logoFile">
+
+      <label>Logo size (%)</label>
+      <input type="number" id="logoSize" value="20">
+
+      <label><input type="checkbox" id="passwordProtect"> Password protect</label>
+      <input type="text" id="password" placeholder="Password" style="display:none;">
+
+      <button onclick="generateQRCode()">Generate</button>
+      <button onclick="downloadPNG()">Download PNG</button>
+      <button onclick="downloadSVG()">Download SVG</button>
+    </div>
+
+    <div class="preview">
+      <div id="previewBox">
+        <div id="qrcode"></div>
+      </div>
+      <button onclick="copyData()">Copy Data</button>
+      <button onclick="window.print()">Print QR</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs/qrcode.min.js"></script>
+  <script>
+    function getContent() {
+      const type = document.getElementById("contentType").value;
+      if (type === "wifi") {
+        const ssid = document.getElementById("wifiSSID").value;
+        const pass = document.getElementById("wifiPass").value;
+        return `WIFI:T:WPA;S:${ssid};P:${pass};;`;
+      } else if (type === "upi") {
+        const upi = document.getElementById("upiId").value;
+        const name = document.getElementById("upiName").value;
+        return `upi://pay?pa=${upi}&pn=${name}`;
+      } else if (type === "vcard") {
+        const name = document.getElementById("vName").value;
+        const phone = document.getElementById("vPhone").value;
+        const email = document.getElementById("vEmail").value;
+        return `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL:${phone}\nEMAIL:${email}\nEND:VCARD`;
+      } else if (type === "dynamic") {
+        const url = document.getElementById("dynURL").value;
+        const expiry = document.getElementById("dynExpiry").value;
+        return `DYNAMIC:${url}|EXPIRY:${expiry}`;
+      } else {
+        return document.getElementById("textInput").value;
+      }
+    }
+
+    function generateQRCode() {
+      const qrContainer = document.getElementById("qrcode");
+      qrContainer.innerHTML = "";
+      const content = getContent();
+      const size = parseInt(document.getElementById("size").value);
+
+      const qr = new QRCode(qrContainer, {
+        text: content,
+        width: size,
+        height: size,
+        colorDark: document.getElementById("fgColor").value,
+        colorLight: document.getElementById("bgColor").value
+      });
+
+      setTimeout(() => {
+        const canvas = qrContainer.querySelector("canvas");
+        const ctx = canvas.getContext("2d");
+
+        // Logo overlay
+        const logoFile = document.getElementById("logoFile").files[0];
+        if (logoFile) {
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+              const logoSize = size * (parseInt(document.getElementById("logoSize").value)/100);
+              ctx.drawImage(img, (size-logoSize)/2, (size-logoSize)/2, logoSize, logoSize);
+            }
+            img.src = e.target.result;
+          }
+          reader.readAsDataURL(logoFile);
+        }
+      }, 300);
+    }
+
+    function downloadPNG() {
+      const canvas = document.querySelector("#qrcode canvas");
+      if (canvas) {
+        const link = document.createElement("a");
+        link.download = "qrcode.png";
+        link.href = canvas.toDataURL();
+        link.click();
+      }
+    }
+
+    function downloadSVG() {
+      const img = document.querySelector("#qrcode img");
+      if (img) {
+        const link = document.createElement("a");
+        link.download = "qrcode.svg";
+        link.href = img.src;
+        link.click();
+      }
+    }
+
+    function copyData() {
+      navigator.clipboard.writeText(getContent());
+      alert("QR data copied!");
+    }
+
+    // Toggle inputs
+    document.getElementById("contentType").addEventListener("change", () => {
+      const type = document.getElementById("contentType").value;
+      document.getElementById("textInput").style.display = (type === "text") ? "block" : "none";
+      document.getElementById("wifiFields").style.display = (type === "wifi") ? "block" : "none";
+      document.getElementById("vcardFields").style.display = (type === "vcard") ? "block" : "none";
+      document.getElementById("upiFields").style.display = (type === "upi") ? "block" : "none";
+      document.getElementById("dynamicFields").style.display = (type === "dynamic") ? "block" : "none";
+    });
+
+    document.getElementById("passwordProtect").addEventListener("change", (e) => {
+      document.getElementById("password").style.display = e.target.checked ? "block" : "none";
+    });
+  </script>
+</body>
+</html>
